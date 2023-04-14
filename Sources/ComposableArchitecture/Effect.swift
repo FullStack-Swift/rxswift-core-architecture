@@ -1,6 +1,8 @@
 import Foundation
 import RxSwift
 
+public typealias EffectTask<Action> = Effect<Action>
+
   /// The ``Effect`` type encapsulates a unit of work that can be run in the outside world, and can
   /// feed data back to the ``Store``. It is the perfect place to do side effects, such as network
   /// requests, saving/loading from disk, creating timers, interacting with dependencies, and more.

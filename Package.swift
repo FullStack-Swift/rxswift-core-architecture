@@ -19,7 +19,8 @@ let package = Package(
   dependencies: [
     .package(url: "https://github.com/ReactiveX/RxSwift.git", from: "6.2.0"),
     .package(url: "https://github.com/pointfreeco/swift-case-paths", from: "0.7.0"),
-    .package(url: "https://github.com/pointfreeco/xctest-dynamic-overlay", from: "0.2.1"),
+    .package(url: "https://github.com/apple/swift-collections", from: "1.0.2"),
+    .package(url: "https://github.com/pointfreeco/swift-identified-collections", from: "0.7.0"),
   ],
   targets: [
     .target(
@@ -28,7 +29,8 @@ let package = Package(
         "RxSwift",
         .product(name: "RxRelay", package: "RxSwift"),
         .product(name: "CasePaths", package: "swift-case-paths"),
-        .product(name: "XCTestDynamicOverlay", package: "xctest-dynamic-overlay"),
+        .product(name: "IdentifiedCollections", package: "swift-identified-collections"),
+        .product(name: "OrderedCollections", package: "swift-collections"),
       ]),
   ]
 )

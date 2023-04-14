@@ -1,26 +1,120 @@
-#if DEBUG
-  import os
+import Foundation
 
-  // NB: Xcode runtime warnings offer a much better experience than traditional assertions and
-  //     breakpoints, but Apple provides no means of creating custom runtime warnings ourselves.
-  //     To work around this, we hook into SwiftUI's runtime issue delivery mechanism, instead.
-  //
-  // Feedback filed: https://gist.github.com/stephencelis/a8d06383ed6ccde3e5ef5d1b3ad52bbc
-  let rw = (
-    dso: { () -> UnsafeMutableRawPointer in
-      let count = _dyld_image_count()
-      for i in 0..<count {
-        if let name = _dyld_get_image_name(i) {
-          let swiftString = String(cString: name)
-          if swiftString.hasSuffix("/SwiftUI") {
-            if let header = _dyld_get_image_header(i) {
-              return UnsafeMutableRawPointer(mutating: UnsafeRawPointer(header))
-            }
-          }
+@_transparent
+@usableFromInline
+@inline(__always)
+func runtimeWarn(
+  _ message: @autoclosure () -> String,
+  category: String? = "ComposableArchitecture",
+  file: StaticString? = nil,
+  line: UInt? = nil
+) {
+#if DEBUG
+  let message = message()
+  let category = category ?? "Runtime Warning"
+  if _XCTIsTesting {
+    if let file = file, let line = line {
+//      XCTFail(message, file: file, line: line)
+    } else {
+//      XCTFail(message)
+    }
+  } else {
+#if canImport(os)
+    os_log(
+      .fault,
+      dso: dso,
+      log: OSLog(subsystem: "com.apple.runtime-issues", category: category),
+      "%@",
+      message
+    )
+#else
+    fputs("\(formatter.string(from: Date())) [\(category)] \(message)\n", stderr)
+#endif
+  }
+#endif
+}
+
+#if DEBUG
+
+#if canImport(os)
+import os
+
+// NB: Xcode runtime warnings offer a much better experience than traditional assertions and
+//     breakpoints, but Apple provides no means of creating custom runtime warnings ourselves.
+//     To work around this, we hook into SwiftUI's runtime issue delivery mechanism, instead.
+//
+// Feedback filed: https://gist.github.com/stephencelis/a8d06383ed6ccde3e5ef5d1b3ad52bbc
+@usableFromInline
+let dso = { () -> UnsafeMutableRawPointer in
+  let count = _dyld_image_count()
+  for i in 0..<count {
+    if let name = _dyld_get_image_name(i) {
+      let swiftString = String(cString: name)
+      if swiftString.hasSuffix("/SwiftUI") {
+        if let header = _dyld_get_image_header(i) {
+          return UnsafeMutableRawPointer(mutating: UnsafeRawPointer(header))
         }
       }
-      return UnsafeMutableRawPointer(mutating: #dsohandle)
-    }(),
-    log: OSLog(subsystem: "com.apple.runtime-issues", category: "ComposableArchitecture")
-  )
+    }
+  }
+  return UnsafeMutableRawPointer(mutating: #dsohandle)
+}()
+#else
+import Foundation
+
+@usableFromInline
+let formatter: DateFormatter = {
+  let formatter = DateFormatter()
+  formatter.dateFormat = "yyyy-MM-dd HH:MM:SS.sssZ"
+  return formatter
+}()
+#endif
+#endif
+
+import Foundation
+
+#if !os(WASI)
+public let _XCTIsTesting: Bool = {
+  ProcessInfo.processInfo.environment.keys.contains("XCTestBundlePath")
+  || ProcessInfo.processInfo.environment.keys.contains("XCTestConfigurationFilePath")
+  || ProcessInfo.processInfo.environment.keys.contains("XCTestSessionIdentifier")
+  || (ProcessInfo.processInfo.arguments.first
+    .flatMap(URL.init(fileURLWithPath:))
+    .map { $0.lastPathComponent == "xctest" || $0.pathExtension == "xctest" }
+      ?? false)
+  || XCTCurrentTestCase != nil
+}()
+#else
+public let _XCTIsTesting = false
+#endif
+
+#if DEBUG
+#if canImport(ObjectiveC)
+import Foundation
+
+@_spi(CurrentTestCase) public var XCTCurrentTestCase: AnyObject? {
+  guard
+    let XCTestObservationCenter = NSClassFromString("XCTestObservationCenter"),
+    let XCTestObservationCenter = XCTestObservationCenter as Any as? NSObjectProtocol,
+    let shared = XCTestObservationCenter.perform(Selector(("sharedTestObservationCenter")))?
+      .takeUnretainedValue(),
+    let observers = shared.perform(Selector(("observers")))?
+      .takeUnretainedValue() as? [AnyObject],
+    let observer =
+      observers
+      .first(where: { NSStringFromClass(type(of: $0)) == "XCTestMisuseObserver" }),
+    let currentTestCase = observer.perform(Selector(("currentTestCase")))?
+      .takeUnretainedValue()
+  else { return nil }
+  return currentTestCase
+}
+#else
+@_spi(CurrentTestCase) public var XCTCurrentTestCase: AnyObject? {
+  nil
+}
+#endif
+#else
+@_spi(CurrentTestCase) public var XCTCurrentTestCase: AnyObject? {
+  nil
+}
 #endif
